@@ -1,2 +1,2 @@
 # Coffeeware-Web-Based-Coffee-Ordering-System
-Coffeeware is a web-based coffee ordering system featuring customer and admin roles, built using HTML, CSS (Bootstrap), JavaScript, PHP Native, and MySQL. This project focuses on UI/UX design and basic web system implementation.
+A web-based coffee ordering system with customer and admin roles. Coffeeware provides end-to-end ordering, order management, reporting, and dashboard features, built using PHP Native, MySQL, Bootstrap, and JavaScript, and designed with a strong focus on UI/UX principles.
