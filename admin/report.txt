@@ -1,0 +1,241 @@
+<?php
+// This is just for very basic implementation reference, in production, you should validate the incoming requests and implement your backend more securely.
+// Please refer to this docs for snap popup:
+// https://docs.midtrans.com/en/snap/integration-guide?id=integration-steps-overview
+
+namespace Midtrans;
+
+require_once dirname(__FILE__) . '/../../Midtrans.php';
+// Set Your server key
+// can find in Merchant Portal -> Settings -> Access keys
+Config::$serverKey = 'Mid-server-MZ3gx97cf273eQ0aR_VzQBIe';
+Config::$clientKey = 'Mid-client-lxIz3ebmxLOHtOa7';
+
+// non-relevant function only used for demo/example purpose
+printExampleWarningMessage();
+
+// Uncomment for production environment
+// Config::$isProduction = true;
+Config::$isSanitized = Config::$is3ds = true;
+
+// Required
+
+include "../../../db_connect.php";
+$order_id = $_GET['order_id'];
+
+// Query data pesanan
+$query = "
+    SELECT 
+        o.order_id,
+        u.name AS customer_name,
+        u.email,
+        u.nomor,
+        m.name AS menu_name,
+        m.category,
+        m.price AS menu_price,
+        oi.quantity,
+        (m.price * oi.quantity) AS subtotal,
+        o.total_price,
+        o.payment_method,
+        o.payment_status,
+        o.order_source,
+        o.status,
+        o.created_at
+    FROM orders o
+    JOIN users u ON o.user_id = u.user_id
+    JOIN order_items oi ON o.order_id = oi.order_id
+    JOIN menu m ON oi.menu_id = m.menu_id
+    WHERE o.order_id = '".$order_id."'
+";
+$sql = mysqli_query($conn, $query);
+
+// Pastikan data ada
+if (mysqli_num_rows($sql) > 0) {
+    $item_details = array();
+    $gross_amount = 0;
+    $nama = '';
+    $email = '';
+    $nomor = '';
+
+    while ($row = mysqli_fetch_assoc($sql)) {
+        // Ambil data customer hanya sekali
+        if (empty($nama)) {
+            $nama = $row['customer_name'];
+            $email = $row['email'];
+            $nomor = $row['nomor'];
+            $gross_amount = (int)$row['total_price'];
+        }
+
+        // Tambahkan item ke array item_details
+        $item_details[] = array(
+            'id' => $row['menu_name'],
+            'price' => (int)$row['menu_price'], // pastikan integer
+            'quantity' => (int)$row['quantity'],
+            'name' => $row['menu_name']
+        );
+    }
+
+    // Jika total_price sudah dihitung di tabel orders, bisa langsung ambil
+    // (gunakan salah satu, tergantung logika aplikasi kamu)
+     // atau pakai hasil akumulasi subtotal di atas
+} else {
+    die("Order tidak ditemukan.");
+}
+
+// Transaction details
+$transaction_details = array(
+    'order_id' => $order_id,
+    'gross_amount' => $gross_amount, // integer
+);
+
+// Customer details
+$customer_details = array(
+    'first_name' => $nama,
+    'last_name'  => "",    
+    'phone'      => $nomor,
+    'email'      => $email,
+);
+
+// Gabungkan semua ke dalam 1 array transaksi
+$transaction = array(
+    'transaction_details' => $transaction_details,
+    'customer_details'    => $customer_details,
+    'item_details'        => $item_details,
+);
+
+$snap_token = '';
+try {
+    $snap_token = Snap::getSnapToken($transaction);
+}
+catch (\Exception $e) {
+    echo $e->getMessage();
+}
+
+
+function printExampleWarningMessage() {
+    if (strpos(Config::$serverKey, 'your ') != false ) {
+        echo "<code>";
+        echo "<h4>Please set your server key from sandbox</h4>";
+        echo "In file: " . __FILE__;
+        echo "<br>";
+        echo "<br>";
+        echo htmlspecialchars('Config::$serverKey = \'<server key anda di midtrans>\';');
+        die();
+    } 
+}
+
+?>
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PAYMENT</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+        body {
+            background: url('../../../img/coffee-back.jpg') center/cover no-repeat fixed;
+            font-family: "Poppins", sans-serif;
+            color: #4b2e2b;
+        }
+
+        .card {
+            background: rgba(255, 248, 240, 0.92);
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 5px 18px rgba(0,0,0,0.2);
+            backdrop-filter: blur(4px);
+        }
+
+        .card-body {
+            padding: 35px;
+        }
+
+        .coffee-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            text-align: center;
+            margin-bottom: 20px;
+            color: #3b2f2f;
+        }
+
+        #pay-button {
+            background-color: #6f4e37;
+            border: none;
+            transition: 0.3s;
+        }
+
+        #pay-button:hover {
+            background-color: #5a3f2d;
+        }
+
+        .btn-back {
+            background-color: #b08968;
+            border: none;
+        }
+
+        .btn-back:hover {
+            background-color: #a0775d;
+        }
+
+        .coffee-decor {
+            text-align: center;
+            font-size: 40px;
+            margin-bottom: 10px;
+        }
+        .center-wrapper {
+            min-height: 60vh;            /* penuh tinggi layar */
+            display: flex;                /* aktifkan flexbox */
+            align-items: center;          /* tengah vertikal */
+            justify-content: center;      /* tengah horizontal */
+            padding: 20px;                /* biar rapi di HP */
+        }
+
+
+        @media (max-width: 576px) {
+            .card-body {
+                padding: 25px;
+            }
+            .coffee-title {
+                font-size: 1.25rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+
+    <br><br>
+    <div class="center-wrapper">
+        <div class="card d-flex align-items-center my-auto">
+            <div class="card-body">
+                <div class="text-center">
+                    <img src="./../../../img/order_done.svg" alt="" width="30%" class="mb-2">
+                    <h4>Hore!! .Pesanan Berhasil!</h4>
+                    <p>ayo selesaikan pembayaran agar pesanan kamu segera di proses</p>
+                </div>
+
+                <div class="d-flex flex-column flex-md-row gap-2">
+                    <button id="pay-button" class="btn btn-primary w-100">Pilih Metode Pembayaran</button>
+                    <a href="../../../menu.php" class="btn btn-back w-100">Kembali ke Menu</a>
+                </div>
+
+                <script src="https://app.sandbox.midtrans.com/snap/snap.js" 
+                    data-client-key="<?php echo Config::$clientKey;?>"></script>
+
+                <script type="text/javascript">
+                    document.getElementById('pay-button').onclick = function(){
+                        snap.pay('<?php echo $snap_token?>');
+                    };
+                </script>
+
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
